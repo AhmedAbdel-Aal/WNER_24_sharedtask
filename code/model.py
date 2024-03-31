@@ -21,7 +21,8 @@ class BertNer(nn.Module):
     self.bilstm = nn.LSTM(hidden_size, self.lstm_hiden, 1, bidirectional=True, batch_first=True,
                dropout=0.1)
     self.linear = nn.Linear(self.lstm_hiden * 2, args.num_labels)
-    self.crf = CRF(args.num_labels, batch_first=True)
+    self.cross_entropy = torch.nn.CrossEntropyLoss()
+    #self.crf = CRF(args.num_labels, batch_first=True)
 
   def forward(self, input_ids, attention_mask, labels=None):
     bert_output = self.bert(input_ids=input_ids, attention_mask=attention_mask)
@@ -34,6 +35,6 @@ class BertNer(nn.Module):
     logits = self.crf.decode(seq_out, mask=attention_mask.bool())
     loss = None
     if labels is not None:
-      loss = -self.crf(seq_out, labels, mask=attention_mask.bool(), reduction='mean')
+      loss = self.cross_entropy(logits, labels)
     model_output = ModelOutput(logits, labels, loss)
     return model_output
