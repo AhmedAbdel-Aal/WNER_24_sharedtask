@@ -32,8 +32,8 @@ def labels_stats(df):
     print(f'unique primary tags size {len(tags)}')
 
 def load_task1_data():
-    train_data = load_json('../data/subtask1/split70.json')
-    dev_data = load_json('../data/subtask1/split10.json')
+    train_data = load_json('/content/drive/MyDrive/anlp24/split70.json')
+    dev_data = load_json('/content/drive/MyDrive/anlp24/split10.json')
     
     # Normalize the data
     normalized_train = normalize_data(train_data)
