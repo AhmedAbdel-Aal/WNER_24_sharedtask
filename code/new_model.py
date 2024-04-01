@@ -6,6 +6,7 @@ import torchmetrics
 from seqeval.metrics import f1_score, accuracy_score
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.optim.lr_scheduler import ExponentialLR
 
 class ProtoSimModel(nn.Module):
 
@@ -131,7 +132,7 @@ class LightningBertNer(pl.LightningModule):
         self.bilstm = torch.nn.LSTM(hidden_size, self.lstm_hidden, 1, bidirectional=True, batch_first=True, dropout=0.1)
         self.linear = torch.nn.Linear(self.lstm_hidden * 2, args.num_labels)
         self.cross_entropy = torch.nn.CrossEntropyLoss()
-        
+        self.dropout = torch.nn.Dropout(args.dropout)
         self.proto_sim_model = ProtoSimModel(args.num_labels+1, self.lstm_hidden*2, args.device)
         
         self.val_accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=args.num_labels)
@@ -144,6 +145,7 @@ class LightningBertNer(pl.LightningModule):
         seq_out = bert_output[0]  # [batchsize, max_len, 768]
         batch_size = seq_out.size(0)
         embeddings, _ = self.bilstm(seq_out)
+        embeddings = self.dropout(embeddings)
         embeddings = embeddings.contiguous().view(-1, self.lstm_hidden * 2)
         seq_out = embeddings.contiguous().view(batch_size, self.max_seq_len, -1)
         logits = self.linear(seq_out)
@@ -187,19 +189,25 @@ class LightningBertNer(pl.LightningModule):
         # Update metrics
         val_accuracy_value = accuracy_score(out_label_list, preds_list)
         val_f1_value = f1_score(out_label_list, preds_list)
+        val_precision = precision_score(out_label_list, preds_list),
+        val_recall = recall_score(out_label_list, preds_list),
 
-
-        self.log('val_loss', val_loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)    
-        self.log('val_accuracy', val_accuracy_value, on_step=True, on_epoch=True, prog_bar=True, logger=True)    
-        self.log('val_f1_value', val_f1_value, on_step=True, on_epoch=True, prog_bar=True, logger=True)    
+        self.log('val_loss', val_loss, on_step=True, prog_bar=True, logger=True)    
+        self.log('val_accuracy', val_accuracy_value, on_epoch=True, prog_bar=True, logger=True)    
+        self.log('val_f1_value', val_f1_value, on_epoch=True, prog_bar=True, logger=True)    
+        self.log('val_precision', val_precision, on_epoch=True, prog_bar=True, logger=True)    
+        self.log('val_recall', val_recall, on_epoch=True, prog_bar=True, logger=True)    
     
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-5)
-        return optimizer
+        optimizer = torch.optim.AdamW(self.parameters(), lr=1e-5)
+        scheduler = ExponentialLR(optimizer, gamma=0.99)  # gamma is the decay rate
+        return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
 
     def align_predictions(self, predictions, label_ids):
-        preds = np.argmax(predictions, axis=2)
+        label_ids = label_ids.detach().cpu().numpy()
+        preds = torch.argmax(predictions, axis=2)
+        preds = preds.detach().cpu().numpy()
 
         batch_size, seq_len = preds.shape
 

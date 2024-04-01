@@ -89,8 +89,8 @@ class NERDataset:
     #   print("label_ids:", " ".join([str(x) for x in label_ids]))
     
     return {
-        'input_ids' : torch.tensor(input_ids, dtype=torch.long),
-        'attention_mask' : torch.tensor(attention_mask, dtype=torch.long),
-        'token_type_ids' : torch.tensor(token_type_ids, dtype=torch.long),
-        'labels' : torch.tensor(label_ids, dtype=torch.long)       
+        'input_ids' : input_ids, 
+        'attention_mask' : attention_mask, 
+        'token_type_ids' : token_type_ids, 
+        'labels' : label_ids,  
     }
