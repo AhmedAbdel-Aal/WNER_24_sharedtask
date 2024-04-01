@@ -9,16 +9,24 @@ import torch.nn.functional as F
 
 class ProtoSimModel(nn.Module):
 
-    def __init__(self, rhetorical_role, embedding_width):
+    def __init__(self, rhetorical_role, embedding_width, device):
         nn.Module.__init__(self)
+        self.rhetorical_role = rhetorical_role
         self.prototypes = nn.Embedding(rhetorical_role, embedding_width)
         self.classification_layer = nn.Linear(embedding_width, rhetorical_role)
         self.cross_entropy = torch.nn.CrossEntropyLoss()
+        self.device = device
 
     def forward(self, role_embedding, role_id):
+        #print(role_embedding.shape)
+        #print(role_id)
+        if (role_id == -100).any().item():
+          role_id = torch.tensor(self.rhetorical_role-1, device = self.device)
+        #print(role_id)
         protos = self.prototypes(role_id)
-        
+        #print(protos)
         protos = F.normalize(protos, p=2, dim=-1)  # Normalize prototype embeddings
+        #print(protos)
         role_embedding = F.normalize(role_embedding, p=2, dim=-1)  # Normalize input embeddings
         
         similarity = torch.sum(protos * role_embedding, dim=-1)  # Cosine similarity
@@ -35,16 +43,18 @@ class ProtoSimModel(nn.Module):
         """
         batch_size = embeddings.size(1)
         cluster_loss = 0.0
-
+        #print('labels: ', labels)
+        #print('unique_labels', torch.unique(labels))
         for label in torch.unique(labels):
             label_mask = labels == label
             other_mask = labels != label
-
+            #print(label_mask)
 
             label_embeddings = embeddings[label_mask]
             other_embeddings = embeddings[other_mask]
             other_labels = labels[other_mask]  # Capture the labels for other embeddings
-
+            #print(label_embeddings.shape)
+            #print(label, label.shape)
             p_sim, _ = self.forward(label_embeddings, label)
             n_sim, _ = self.forward(other_embeddings, label)
 
@@ -122,7 +132,7 @@ class LightningBertNer(pl.LightningModule):
         self.linear = torch.nn.Linear(self.lstm_hidden * 2, args.num_labels)
         self.cross_entropy = torch.nn.CrossEntropyLoss()
         
-        self.proto_sim_model = ProtoSimModel(args.num_labels, self.lstm_hidden*2)
+        self.proto_sim_model = ProtoSimModel(args.num_labels+1, self.lstm_hidden*2, args.device)
         
         self.val_accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=args.num_labels)
         self.all_labels = args.all_labels
@@ -141,6 +151,7 @@ class LightningBertNer(pl.LightningModule):
         if labels is not None:
             loss = self.cross_entropy(logits.view(-1, self.args.num_labels), labels.view(-1))
             outputs['loss'] = loss
+            #print(embeddings.shape)
             pc_loss = self.proto_sim_model.get_proto_centric_loss(embeddings, labels.view(-1))
             sc_loss = self.proto_sim_model.get_sample_centric_loss(embeddings, labels.view(-1))
             outputs['pc_loss'] = pc_loss
