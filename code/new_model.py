@@ -167,8 +167,8 @@ class LightningBertNer(pl.LightningModule):
         input_ids, attention_mask, token_type_ids, labels = batch['input_ids'], batch['attention_mask'], batch['token_type_ids'], batch['label']
         outputs = self.forward(input_ids, attention_mask, labels)
         loss = outputs['loss']
-        pc_loss = outputs['pc_loss'] 
-        sc_loss = outputs['sc_loss'] 
+        pc_loss = 5.0 * outputs['pc_loss'] 
+        sc_loss = 5.0 * outputs['sc_loss'] 
         self.log('train_loss', loss)
         self.log('pc_loss', pc_loss)
         self.log('sc_loss', sc_loss)
@@ -200,8 +200,8 @@ class LightningBertNer(pl.LightningModule):
     
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=3e-5)
-        scheduler = ExponentialLR(optimizer, gamma=0.99)  # gamma is the decay rate
-        return {"optimizer": optimizer, "lr_scheduler": scheduler}
+        #scheduler = ExponentialLR(optimizer, gamma=0.99)  # gamma is the decay rate
+        return {"optimizer": optimizer}#, "lr_scheduler": scheduler}
 
 
     def align_predictions(self, predictions, label_ids):
