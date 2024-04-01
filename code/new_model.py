@@ -7,6 +7,107 @@ from seqeval.metrics import f1_score, accuracy_score
 import torch.nn as nn
 import torch.nn.functional as F
 
+class ProtoSimModel(nn.Module):
+
+    def __init__(self, rhetorical_role, embedding_width):
+        nn.Module.__init__(self)
+        self.prototypes = nn.Embedding(rhetorical_role, embedding_width)
+        self.classification_layer = nn.Linear(embedding_width, rhetorical_role)
+        self.cross_entropy = torch.nn.CrossEntropyLoss()
+
+    def forward(self, role_embedding, role_id):
+        protos = self.prototypes(role_id)
+        
+        protos = F.normalize(protos, p=2, dim=-1)  # Normalize prototype embeddings
+        role_embedding = F.normalize(role_embedding, p=2, dim=-1)  # Normalize input embeddings
+        
+        similarity = torch.sum(protos * role_embedding, dim=-1)  # Cosine similarity
+        similarity = torch.exp(similarity)
+        dist = 1-(1 / (1 + similarity))  # Cosine distance
+        
+        predict_role = self.classification_layer(protos)
+        
+        return dist, predict_role
+
+    def get_proto_centric_loss(self, embeddings, labels):
+        """
+        prototypes centric view
+        """
+        batch_size = embeddings.size(1)
+        cluster_loss = 0.0
+
+        for label in torch.unique(labels):
+            label_mask = labels == label
+            other_mask = labels != label
+
+
+            label_embeddings = embeddings[label_mask]
+            other_embeddings = embeddings[other_mask]
+            other_labels = labels[other_mask]  # Capture the labels for other embeddings
+
+            p_sim, _ = self.forward(label_embeddings, label)
+            n_sim, _ = self.forward(other_embeddings, label)
+
+            cluster_loss += -(torch.mean(torch.log(p_sim + 1e-5)) + torch.mean(torch.log(1 - n_sim + 1e-5)))
+
+        cluster_loss /= batch_size
+
+        return cluster_loss
+
+
+    def get_classification_loss(self, embeddings, labels):
+        batch_size = embeddings.size(1)
+        cls_loss = 0.0
+
+        for label in torch.unique(labels):
+            label_mask = labels == label
+            other_mask = labels != label
+
+            label_embeddings = embeddings[label_mask]
+            other_embeddings = embeddings[other_mask]
+            other_labels = labels[other_mask]
+
+            _, p_predicted_role = self.forward(label_embeddings, label)
+            _, n_predicted_role = self.forward(other_embeddings, other_labels)
+
+            p_label = label.repeat(p_predicted_role.size(0)).type(torch.FloatTensor).cuda()
+
+            cls_loss += self.cross_entropy(p_predicted_role, p_label)
+            cls_loss += self.cross_entropy(n_predicted_role, other_labels)
+
+        cls_loss /= batch_size
+        return cls_loss
+    
+    def get_sample_centric_loss(self, embeddings, labels):
+        """
+        sample centric view
+        """
+        batch_size = embeddings.size(1)
+        cluster_loss = 0.0
+
+        unique_labels = torch.unique(labels)
+
+        for label in unique_labels:
+            label_mask = labels == label
+            label_embeddings = embeddings[label_mask]
+
+            # Calculate psim: distance between embeddings and their corresponding prototype
+            p_sim, _ = self.forward(label_embeddings, label)
+
+            # Calculate nsim: distance between embeddings and prototypes of different classes
+            other_labels = unique_labels[unique_labels != label]
+            n_sim_list = []
+            for other_label in other_labels:
+                n_sim, _ = self.forward(label_embeddings, other_label)
+                n_sim_list.append(n_sim)
+
+            n_sim = torch.mean(torch.stack(n_sim_list), dim=0)
+
+            cluster_loss += -(torch.mean(torch.log(p_sim + 1e-5)) + torch.mean(torch.log(1 - n_sim + 1e-5)))
+
+        cluster_loss /= batch_size
+
+        return cluster_loss
 
 class LightningBertNer(pl.LightningModule):
     def __init__(self, args):
@@ -21,7 +122,7 @@ class LightningBertNer(pl.LightningModule):
         self.linear = torch.nn.Linear(self.lstm_hidden * 2, args.num_labels)
         self.cross_entropy = torch.nn.CrossEntropyLoss()
         
-        self.prototypes = nn.Embedding(args.num_labels, self.lstm_hidden*2)
+        self.proto_sim_model = ProtoSimModel(args.num_labels, self.lstm_hidden*2)
         
         self.val_accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=args.num_labels)
         self.all_labels = args.all_labels
@@ -40,91 +141,25 @@ class LightningBertNer(pl.LightningModule):
         if labels is not None:
             loss = self.cross_entropy(logits.view(-1, self.args.num_labels), labels.view(-1))
             outputs['loss'] = loss
-            pc_loss = self.get_proto_centric_loss(embeddings, labels.view(-1))
-            sc_loss = self.get_sample_centric_loss(embeddings, labels.view(-1))
+            pc_loss = self.proto_sim_model.get_proto_centric_loss(embeddings, labels.view(-1))
+            sc_loss = self.proto_sim_model.get_sample_centric_loss(embeddings, labels.view(-1))
             outputs['pc_loss'] = pc_loss
             outputs['sc_loss'] = sc_loss
         
         return outputs
     
-    def proto_forward(self, token_embeddings, labels):
-        protos = self.prototypes(labels)
-        protos = F.normalize(protos, p=2, dim=-1)  # Normalize prototype embeddings
-        token_embeddings = F.normalize(token_embeddings, p=2, dim=-1)  # Normalize input embeddings
-        
-        similarity = torch.sum(protos * token_embeddings, dim=-1)  # Cosine similarity
-        similarity = torch.exp(similarity)
-        dist = 1-(1 / (1 + similarity))  # Cosine distance
-        
-        return dist
-        
-    def get_proto_centric_loss(self, embeddings, labels):
-        """
-        prototypes centric view
-        """
-        print(embeddings.shape)
-        print(labels.shape)
-
-        batch_size = embeddings.size(1)
-        cluster_loss = 0.0
-
-        for label in torch.unique(labels):
-            label_mask = labels == label
-            other_mask = labels != label
-
-
-            label_embeddings = embeddings[label_mask]
-            other_embeddings = embeddings[other_mask]
-            other_labels = labels[other_mask]  # Capture the labels for other embeddings
-
-            p_sim, _ = self.proto_forward(label_embeddings, label)
-            n_sim, _ = self.proto_forward(other_embeddings, label)
-
-            cluster_loss += -(torch.mean(torch.log(p_sim + 1e-5)) + torch.mean(torch.log(1 - n_sim + 1e-5)))
-
-        cluster_loss /= batch_size
-
-        return cluster_loss
-        
-    def get_sample_centric_loss(self, embeddings, labels):
-        """
-        sample centric view
-        """
-        batch_size = embeddings.size(1)
-        cluster_loss = 0.0
-
-        unique_labels = torch.unique(labels)
-
-        for label in unique_labels:
-            label_mask = labels == label
-            label_embeddings = embeddings[label_mask]
-
-            # Calculate psim: distance between embeddings and their corresponding prototype
-            p_sim, _ = self.proto_forward(label_embeddings, label)
-
-            # Calculate nsim: distance between embeddings and prototypes of different classes
-            other_labels = unique_labels[unique_labels != label]
-            n_sim_list = []
-            for other_label in other_labels:
-                n_sim, _ = self.proto_forward(label_embeddings, other_label)
-                n_sim_list.append(n_sim)
-
-            n_sim = torch.mean(torch.stack(n_sim_list), dim=0)
-
-            cluster_loss += -(torch.mean(torch.log(p_sim + 1e-5)) + torch.mean(torch.log(1 - n_sim + 1e-5)))
-
-        cluster_loss /= batch_size
-
-        return cluster_loss
-
 
     def training_step(self, batch, batch_idx):
         #input_ids, attention_mask,token_type_ids, labels = batch
         input_ids, attention_mask, token_type_ids, labels = batch['input_ids'], batch['attention_mask'], batch['token_type_ids'], batch['label']
         outputs = self.forward(input_ids, attention_mask, labels)
         loss = outputs['loss']
+        pc_loss = outputs['pc_loss'] 
+        sc_loss = outputs['sc_loss'] 
         self.log('train_loss', loss)
-        return loss
+        self.log('pc_loss', pc_loss)
+        self.log('sc_loss', sc_loss)
+        return loss + pc_loss + sc_loss
     
     def validation_step(self, batch, batch_idx):
         input_ids, attention_mask, token_type_ids, labels = batch['input_ids'], batch['attention_mask'], batch['token_type_ids'], batch['label']
