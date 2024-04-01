@@ -3,7 +3,7 @@ import pytorch_lightning as pl
 from transformers import BertModel, BertConfig
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import torchmetrics
-from seqeval.metrics import f1_score, accuracy_score
+from seqeval.metrics import f1_score, accuracy_score, precision_score, recall_score
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import ExponentialLR
@@ -189,8 +189,8 @@ class LightningBertNer(pl.LightningModule):
         # Update metrics
         val_accuracy_value = accuracy_score(out_label_list, preds_list)
         val_f1_value = f1_score(out_label_list, preds_list)
-        val_precision = precision_score(out_label_list, preds_list),
-        val_recall = recall_score(out_label_list, preds_list),
+        val_precision = precision_score(out_label_list, preds_list)
+        val_recall = recall_score(out_label_list, preds_list)
 
         self.log('val_loss', val_loss, on_step=True, prog_bar=True, logger=True)    
         self.log('val_accuracy', val_accuracy_value, on_epoch=True, prog_bar=True, logger=True)    
@@ -199,7 +199,7 @@ class LightningBertNer(pl.LightningModule):
         self.log('val_recall', val_recall, on_epoch=True, prog_bar=True, logger=True)    
     
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=1e-5)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=3e-5)
         scheduler = ExponentialLR(optimizer, gamma=0.99)  # gamma is the decay rate
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
