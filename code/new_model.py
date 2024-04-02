@@ -140,7 +140,7 @@ class LightningBertNer(pl.LightningModule):
         self.inv_label_map = {i: label for i, label in enumerate(self.all_labels)}
 
 
-    def forward(self, input_ids, attention_mask, labels=None):
+    def forward(self, input_ids, attention_mask, labels=None, get_embeddings=False):
         bert_output = self.bert(input_ids=input_ids, attention_mask=attention_mask)
         seq_out = bert_output[0]  # [batchsize, max_len, 768]
         batch_size = seq_out.size(0)
@@ -158,7 +158,8 @@ class LightningBertNer(pl.LightningModule):
             sc_loss = self.proto_sim_model.get_sample_centric_loss(embeddings, labels.view(-1))
             outputs['pc_loss'] = pc_loss
             outputs['sc_loss'] = sc_loss
-        
+        if get_embeddings:
+            outputs['embeddings'] = embeddings
         return outputs
     
 
@@ -197,7 +198,43 @@ class LightningBertNer(pl.LightningModule):
         self.log('val_f1_value', val_f1_value, on_epoch=True, prog_bar=True, logger=True)    
         self.log('val_precision', val_precision, on_epoch=True, prog_bar=True, logger=True)    
         self.log('val_recall', val_recall, on_epoch=True, prog_bar=True, logger=True)    
-    
+        return outputs
+
+    def test_step(self, batch, batch_idx):
+        input_ids, attention_mask, token_type_ids, labels = batch['input_ids'], batch['attention_mask'], batch['token_type_ids'], batch['label']
+        outputs = self.forward(input_ids, attention_mask, labels)
+        val_loss = outputs['loss']
+        logits = outputs['logits']
+        
+        # Calculate predictions
+        preds_list, out_label_list = self.align_predictions(logits, labels)
+        preds = torch.argmax(logits, dim=2)
+        labels = labels.view(-1)
+        preds = preds.view(-1)
+
+        # Update metrics
+        val_accuracy_value = accuracy_score(out_label_list, preds_list)
+        val_f1_value = f1_score(out_label_list, preds_list)
+        val_precision = precision_score(out_label_list, preds_list)
+        val_recall = recall_score(out_label_list, preds_list)
+
+        self.log('val_loss', val_loss, on_step=True, prog_bar=True, logger=True)    
+        self.log('val_accuracy', val_accuracy_value, on_epoch=True, prog_bar=True, logger=True)    
+        self.log('val_f1_value', val_f1_value, on_epoch=True, prog_bar=True, logger=True)    
+        self.log('val_precision', val_precision, on_epoch=True, prog_bar=True, logger=True)    
+        self.log('val_recall', val_recall, on_epoch=True, prog_bar=True, logger=True)    
+        return outputs
+
+
+
+    def test_step_protos(self, batch, batch_idx):
+        input_ids, attention_mask, token_type_ids, labels = batch['input_ids'], batch['attention_mask'], batch['token_type_ids'], batch['label']
+        outputs = self.forward(input_ids, attention_mask, labels, get_embeddings=True)
+        return outputs['embeddings'], outputs['logits']
+
+
+
+
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=3e-5)
         #scheduler = ExponentialLR(optimizer, gamma=0.99)  # gamma is the decay rate
