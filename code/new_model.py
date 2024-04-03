@@ -123,6 +123,7 @@ class ProtoSimModel(nn.Module):
 class LightningBertNer(pl.LightningModule):
     def __init__(self, args):
         super(LightningBertNer, self).__init__()
+        self.save_hyperparameters()
         self.args = args
         self.bert = BertModel.from_pretrained(args.bert_dir)
         self.bert_config = BertConfig.from_pretrained(args.bert_dir)
