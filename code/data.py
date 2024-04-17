@@ -13,7 +13,7 @@ import torch
 
 
 class NERDataset:
-  def __init__(self, texts, tags, label_list, model_name, max_length):
+  def __init__(self, texts, tags, label_list, model_name, tokenizer_name, max_length):
     self.texts = texts
     self.tags = tags
     self.label_map = {label: i for i, label in enumerate(label_list)}
@@ -23,9 +23,9 @@ class NERDataset:
     # real label ids contribute to the loss later.
     tokenizer = None
     if 'gpt' in model_name:
-        tokenizer = GPT2TokenizerFast.from_pretrained(model_name)
+        tokenizer = GPT2TokenizerFast.from_pretrained(tokenizer_name)
     else:
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
     self.max_length = max_length
 
      
@@ -92,5 +92,6 @@ class NERDataset:
         'input_ids' : input_ids, 
         'attention_mask' : attention_mask, 
         'token_type_ids' : token_type_ids, 
-        'labels' : label_ids,  
+        'labels' : label_ids,
+        'text':textlist  
     }
