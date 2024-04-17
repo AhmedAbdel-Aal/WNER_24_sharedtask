@@ -13,10 +13,10 @@ import torch
 
 
 class NERDataset:
-  def __init__(self, texts, tags, label_list, model_name, tokenizer_name, max_length):
+  def __init__(self, texts, tags, label_map, model_name, tokenizer_name, max_length):
     self.texts = texts
     self.tags = tags
-    self.label_map = {label: i for i, label in enumerate(label_list)}
+    self.label_map = label_map
     self.preprocessor = ArabertPreprocessor(model_name.split("/")[-1])    
     self.pad_token_label_id = torch.nn.CrossEntropyLoss().ignore_index
     # Use cross entropy ignore_index as padding label id so that only
