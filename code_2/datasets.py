@@ -57,7 +57,7 @@ class NERDataset(Dataset):
         :param: int - maximum sequence length
         """
         self.tokenizer = BertTokenizer.from_pretrained(bert_model)
-        self.transform = BertSeqTransform(bert_model, label_map, max_seq_len=max_seq_len)
+        self.transform = BertSeqTransform(bert_model, self.tokenizer, label_map, max_seq_len=max_seq_len)
         self.examples = examples
         self.label_map = label_map
 
