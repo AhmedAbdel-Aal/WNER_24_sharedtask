@@ -1,5 +1,4 @@
 import torch
-from transformers import BertTokenizer
 from functools import partial
 import re
 import itertools
@@ -7,8 +6,8 @@ import datasets
 
 
 class BertSeqTransform:
-    def __init__(self, bert_model, label_map, max_seq_len=512):
-        self.tokenizer = BertTokenizer.from_pretrained(bert_model)
+    def __init__(self, bert_model, tokenizer,  label_map, max_seq_len=512):
+        self.tokenizer = tokenizer
         self.encoder = partial(
             self.tokenizer.encode,
             max_length=max_seq_len,

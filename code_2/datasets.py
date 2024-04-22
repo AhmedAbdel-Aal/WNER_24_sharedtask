@@ -1,7 +1,9 @@
 import torch
 from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
+from transformers import BertTokenizer
 from transforms import BertSeqTransform
+
 
 
 
@@ -54,6 +56,7 @@ class NERDataset(Dataset):
         :param bert_model: str - BERT model
         :param: int - maximum sequence length
         """
+        self.tokenizer = BertTokenizer.from_pretrained(bert_model)
         self.transform = BertSeqTransform(bert_model, label_map, max_seq_len=max_seq_len)
         self.examples = examples
         self.label_map = label_map
@@ -77,9 +80,9 @@ class NERDataset(Dataset):
         # Pad sequences in this batch
         # input_ids and attention_mask are padded with zeros
         # tags are padding with the index of the O tag
-        input_ids = pad_sequence(input_ids, batch_first=True, padding_value=0)
+        input_ids = pad_sequence(input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id)
         attention_mask = pad_sequence(attention_mask, batch_first=True, padding_value=0)
         tags = pad_sequence(
-            tags, batch_first=True, padding_value=self.label_map["O"]
+            tags, batch_first=True, padding_value=torch.nn.CrossEntropyLoss().ignore_index
         )
         return input_ids, attention_mask, tags, tokens
