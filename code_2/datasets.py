@@ -85,4 +85,5 @@ class NERDataset(Dataset):
         tags = pad_sequence(
             tags, batch_first=True, padding_value=torch.nn.CrossEntropyLoss().ignore_index
         )
-        return input_ids, attention_mask, tags, tokens
+        r = {'input_ids':input_ids, 'attention_mask':attention_mask, 'labels':tags}
+        return r
