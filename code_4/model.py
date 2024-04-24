@@ -146,7 +146,7 @@ class BertTokenEmbedder(torch.nn.Module):
         outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
        
         # shape (batch_size, tokens, 768)
-        bert_embeddings = outputs[0]
+        bert_embeddings = outputs.last_hidden_state
 
         return bert_embeddings
 
@@ -212,7 +212,7 @@ class BertHSLN(torch.nn.Module):
         filtered_logits = logits[valid_mask]
         filtered_embeddings = embeddings[valid_mask]
         
-        return torch.tensor(filtered_logits),torch.tensor(filtered_embeddings), torch.tensor(filtered_labels)
+        return filtered_logits, filtered_embeddings, filtered_labels
 
 
     def forward(self, batch, labels=None, get_embeddings = False, train=True):
