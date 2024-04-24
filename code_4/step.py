@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 from seqeval.metrics import accuracy_score, f1_score, precision_score, recall_score, classification_report
+from tqdm import notebook
 
 def training_step(model, optimizer, scheduler, data_loader, device):
     model.train()  # Set the model to train mode
@@ -11,9 +12,8 @@ def training_step(model, optimizer, scheduler, data_loader, device):
 
     all_labels = []
     all_predicted = []
-
-    for batch_idx, batch in enumerate(data_loader):
-
+    batch_idx = 0
+    for batch in notebook.tqdm(data_loader):
         optimizer.zero_grad()  # Zero out gradients
 
         for key, tensor in batch.items():
@@ -41,8 +41,10 @@ def training_step(model, optimizer, scheduler, data_loader, device):
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
+        batch_idx +=1
 
     scheduler.step()
+    batch_idx = 0
 
     # Calculate epoch statistics
     train_loss['cls'] = train_loss['cls'] / len(data_loader)
