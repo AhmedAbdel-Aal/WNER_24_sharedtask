@@ -16,7 +16,9 @@ class ProtoSimModel(nn.Module):
         self.cross_entropy = torch.nn.CrossEntropyLoss()
 
     def forward(self, role_embedding, role_id):
+        print('prototypes: ',self.prototypes)
         protos = self.prototypes(role_id)
+        print('selected_proto: ',protos)
         
         protos = F.normalize(protos, p=2, dim=-1)  # Normalize prototype embeddings
         role_embedding = F.normalize(role_embedding, p=2, dim=-1)  # Normalize input embeddings
@@ -115,18 +117,15 @@ class ProtoSimModel(nn.Module):
 class BertTokenEmbedder(torch.nn.Module):
     def __init__(self, config):
         super(BertTokenEmbedder, self).__init__()
-        self.bert = BertModel.from_pretrained(config["bert_model"])
+        self.bert = BertModel.from_pretrained(config["bert_model"]).to(config['device'])
         self.bert_hidden_size = self.bert.config.hidden_size
 
-    def forward(self, batch):
-        batch_size, sentences, tokens = batch["input_ids"].shape
-
-        attention_mask = batch["attention_mask"].view(-1, tokens)
-        input_ids = batch["input_ids"].view(-1, tokens)
+    def forward(self, input_ids, attention_mask, labels):
+        batch_size, tokens = input_ids.shape
 
         outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
        
-        # shape (documents*sentences, tokens, 768)
+        # shape (batch_size, tokens, 768)
         bert_embeddings = outputs[0]
 
         return bert_embeddings
@@ -135,62 +134,89 @@ class BertHSLN(torch.nn.Module):
     '''
     Model for Baseline, Sequential Transfer Learning and Multitask-Learning with all layers shared (except output layer).
     '''
-    def __init__(self, config, num_labels):
+    def __init__(self, config, label_map):
         super(BertHSLN, self).__init__()
-        self.use_crf = config['use_crf']
-        self.num_labels = num_labels
+        self.num_labels = config['num_labels']
+        self.label_map = config['label_map']
+        self.inv_label_map = config['inv_label_map']
+        self.device = config['device']
+
         self.bert = BertTokenEmbedder(config)
 
         # Jin et al. uses DROPOUT WITH EXPECTATION-LINEAR REGULARIZATION (see Ma et al. 2016),
         # we use instead default dropout
         self.dropout = torch.nn.Dropout(config["dropout"])
         
-        self.lstm_hidden_size = config["word_lstm_hs"]
+        self.hidden_size = self.bert.bert_hidden_size
 
         # Initialize ProtoSimModel
-        self.proto_sim_model = ProtoSimModel(self.num_labels, self.lstm_hidden_size * 2)
+        self.proto_sim_model = ProtoSimModel(self.num_labels, self.hidden_size)
 
-        self.classifier = torch.nn.Linear(self.lstm_hidden_size * 2, self.num_labels)
+        self.classifier = torch.nn.Linear(self.hidden_size, self.num_labels, device = self.device)
         
+    
+    def align_logits(self, logits, label_ids):
         
+        logits = logits.detach().cpu().numpy()
+        label_ids = label_ids.detach().cpu().numpy()
+        preds = np.argmax(logits, axis=2)
+
+        batch_size, seq_len = preds.shape
+
+        ignored_index = torch.nn.CrossEntropyLoss().ignore_index
+
+        valid_mask = label_ids != ignored_index
+
+        # Use boolean indexing to filter out the embeddings and logits
+        filtered_preds = preds[valid_mask]
+        filtered_labels = label_ids[valid_mask]
+        filtered_logits = logits[valid_mask]
+
+        # Map labels using inv_label_map, vectorized operation
+        aligned_labels = [self.inv_label_map[label.item()] for label in filtered_labels]
+        aligned_preds = [self.inv_label_map[label.item()] for label in filtered_preds]
+
+        assert len(aligned_preds) == len(aligned_labels)
+        
+        return aligned_preds, aligned_labels, filtered_logits
+
+
     def forward(self, batch, labels=None, get_embeddings = False):
 
-        input_ids = batch['input_ids'].to('cuda')
-        attention_mask = batch['attention_mask'].to('cuda')
-        labels = batch['labels'].to('cuda')
+        input_ids = batch['input_ids'].to(self.device)
+        attention_mask = batch['attention_mask'].to(self.device)
+        labels = batch['labels'].to(self.device)
 
-        batch_size, sentences, tokens = batch["input_ids"].shape
+        batch_size, tokens = batch["input_ids"].shape
         
 
-        # shape (documents*sentences, tokens, 768)
+        # shape (batch_size, tokens, hidden_size)
         bert_embeddings = self.bert(input_ids, attention_mask, labels)
-
-        # in Jin et al. only here dropout
         bert_embeddings = self.dropout(bert_embeddings)
+        print('bert_embeddings:',bert_embeddings.shape)
+
+        # shape (batch_size, tokens, num_label)
+        logits = self.classifier(bert_embeddings)
+        print('logits:',logits.shape)
+
 
         output = {}
         if labels is not None:
-                logits = logits.squeeze()
-                labels = labels.squeeze()
-                predicted_labels = torch.argmax(logits, dim=1)
-                output['predicted_label'] = predicted_labels
-
-                loss = F.cross_entropy(logits, labels)
-                pc_loss = self.proto_sim_model.get_proto_centric_loss(bert_embeddings, labels.unsqueeze(0))
-                sc_loss = self.proto_sim_model.get_sample_centric_loss(bert_embeddings, labels.unsqueeze(0))
-                cls_loss = self.proto_sim_model.get_classification_loss(bert_embeddings, labels.unsqueeze(0))
+                loss = F.cross_entropy(logits.view(-1,42), labels.view(-1))
+                print('loss: ',loss)
+                pc_loss = self.proto_sim_model.get_proto_centric_loss(bert_embeddings, labels)
+                sc_loss = self.proto_sim_model.get_sample_centric_loss(bert_embeddings, labels)
+                cls_loss = self.proto_sim_model.get_classification_loss(bert_embeddings, labels)
                 
                 output['loss'] = loss
                 output['pc_loss'] = pc_loss
                 output['sc_loss'] = sc_loss
                 output['cls_loss'] = cls_loss
-                
                 output['logits']=logits
         else:
-                logits = logits.squeeze()
-                predicted_labels = torch.argmax(logits, dim=1)
-                output['predicted_label'] = predicted_labels
-                output['logits']=logits
+                aligned_preds, aligned_labels, aligned_logits =  self.align_logits(logits, labels)
+                output['predicted_labels'] = aligned_preds
+                output['aligned_logits'] = aligned_logits
 
 
         if get_embeddings:
