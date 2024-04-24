@@ -117,7 +117,7 @@ class ProtoSimModel(nn.Module):
 class BertTokenEmbedder(torch.nn.Module):
     def __init__(self, config):
         super(BertTokenEmbedder, self).__init__()
-        self.bert = BertModel.from_pretrained(config["bert_model"]).to(config['device'])
+        self.bert = BertModel.from_pretrained(config["bert_model"])
         self.bert_hidden_size = self.bert.config.hidden_size
 
     def forward(self, input_ids, attention_mask, labels):
@@ -152,7 +152,7 @@ class BertHSLN(torch.nn.Module):
         # Initialize ProtoSimModel
         self.proto_sim_model = ProtoSimModel(self.num_labels, self.hidden_size)
 
-        self.classifier = torch.nn.Linear(self.hidden_size, self.num_labels, device = self.device)
+        self.classifier = torch.nn.Linear(self.hidden_size, self.num_labels)
         
     
     def align_logits(self, logits, label_ids):
