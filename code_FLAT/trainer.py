@@ -12,8 +12,8 @@ def train(model, dataloader, optimizer, criterion_main, criterion_subtype, epoch
         for batch in dataloader:
             input_ids = batch['input_ids']
             attention_mask = batch['attention_mask']
-            main_labels = batch['main_labels']
-            subtype_labels = batch['subtype_labels']
+            main_labels = batch['labels']
+            subtype_labels = batch['sub_tags']
             
             optimizer.zero_grad()
             
@@ -21,7 +21,7 @@ def train(model, dataloader, optimizer, criterion_main, criterion_subtype, epoch
             main_logits, subtype_logits = model(input_ids, attention_mask)
             
             # Compute loss
-            loss_main = criterion_main(main_logits, main_labels)
+            loss_main = criterion_main(main_logits.transpose(1, 2), main_labels)
             loss_subtype = criterion_subtype(subtype_logits, subtype_labels)
             total_loss = loss_main + loss_subtype
             
@@ -35,3 +35,16 @@ def train(model, dataloader, optimizer, criterion_main, criterion_subtype, epoch
 
 # Assuming 'dataloader' is defined and loaded with the appropriate batched data
 # train(model, dataloader, optimizer, criterion_main, criterion_subtype)
+
+def evaluate(model, dataloader, criterion_main, criterion_subtype):
+    model.eval()
+    total_loss = 0
+    with torch.no_grad():
+        for batch in dataloader:
+            input_ids = batch['input_ids']
+            attention_mask = batch['attention_mask']
+            main_labels = batch['main_labels']
+            subtype_labels = batch['subtype_labels']
+            
+            # Forward pass
+            main_logits, subtype_logits = model(input_ids, attention_mask)

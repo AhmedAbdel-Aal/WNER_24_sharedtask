@@ -36,7 +36,7 @@ class BertSeqTransform:
         if len(l3_tags) > 0:
             sub_tags += l3_tags
         
-        one_hot = [torch.zeros(len(self.sub_labels_map))]
+        one_hot = torch.zeros(len(self.sub_labels_map))
         for tag in sub_tags:
             one_hot[self.sub_labels_map[tag]] = 1
         return one_hot
@@ -56,12 +56,11 @@ class BertSeqTransform:
             tags += [self.id_of_o] * (len(token_input_ids) - 1) #tag of O
 
             one_hot = self.get_subtags_onehot_encoding(token.l2_tags, token.l3_tags)
-            sub_tags += one_hot
-            sub_tags += [torch.zeros(len(self.sub_labels_map))] * (len(token_input_ids) - 1)
-
+            sub_tags.append(one_hot)
+            for i in range(len(token_input_ids) - 1):
+              sub_tags.append(torch.zeros(len(self.sub_labels_map)))
             # append tokens with UNK if the word has mutliple tokens
             tokens += [token] + [self.pad_token] * (len(token_input_ids) - 1)
-        
         # Truncate to max_seq_len if needed
         truncat_length = (len(input_ids) + 2) - self.max_seq_len
         if truncat_length > 0:
@@ -98,6 +97,7 @@ class BertSeqTransform:
         tags = torch.LongTensor(tags)
         print(sub_tags)
         sub_tags = torch.stack(sub_tags)
+        
 
         #print(input_ids.shape, attention_mask.shape, tags.shape)
 
