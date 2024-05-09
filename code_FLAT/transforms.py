@@ -95,7 +95,6 @@ class BertSeqTransform:
         input_ids =  torch.LongTensor(input_ids)
         attention_mask =  torch.LongTensor(attention_mask)
         tags = torch.LongTensor(tags)
-        print(sub_tags)
         sub_tags = torch.stack(sub_tags)
         
 
