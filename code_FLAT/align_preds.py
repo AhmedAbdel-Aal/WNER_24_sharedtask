@@ -11,12 +11,12 @@ def align_predictions(main_logits, main_labels, inv_main_label_map):
     ignored_index = torch.nn.CrossEntropyLoss().ignore_index
 
     valid_mask = main_labels != ignored_index
-    print(valid_mask.shape)
+    #print(valid_mask.shape)
 
     # Use boolean indexing to filter out the embeddings and logits
     filtered_preds = preds[valid_mask]
     filtered_labels = main_labels[valid_mask]
-    print(filtered_preds.shape, filtered_labels.shape)
+    #print(filtered_preds.shape, filtered_labels.shape)
 
     # Map labels using inv_label_map, vectorized operation
     preds_list = [inv_main_label_map[label.item()] for label in filtered_preds]

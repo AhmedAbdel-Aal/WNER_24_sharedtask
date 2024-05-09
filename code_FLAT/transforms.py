@@ -90,9 +90,12 @@ class BertSeqTransform:
 
         tags.insert(0, self.id_of_o) # tag of CLS
         tags.append(self.id_of_o) # tag of SEP
+        
+        one_hot = torch.zeros(len(self.sub_labels_map))
+        one_hot[self.sub_labels_map["O"]] = 1
 
-        sub_tags.insert(0, torch.zeros(len(self.sub_labels_map))) # tag of CLS
-        sub_tags.append(torch.zeros(len(self.sub_labels_map)))
+        sub_tags.insert(0, one_hot) # tag of CLS
+        sub_tags.append(one_hot)
 
         tokens.insert(0, self.pad_token) # token for CLS
         tokens.append(self.pad_token) # token for SEP
