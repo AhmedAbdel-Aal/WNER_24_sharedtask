@@ -35,6 +35,7 @@ class NERDataset(Dataset):
         self,
         examples=None,
         label_map=None,
+        sub_label_map=None,
         bert_model="aubmindlab/bert-base-arabertv2",
         max_seq_len=512,
     ):
@@ -47,7 +48,7 @@ class NERDataset(Dataset):
         :param: int - maximum sequence length
         """
         self.tokenizer = BertTokenizer.from_pretrained(bert_model)
-        self.transform = BertSeqTransform(bert_model, self.tokenizer, label_map, max_seq_len=max_seq_len)
+        self.transform = BertSeqTransform(bert_model, self.tokenizer, label_map, sub_label_map, max_seq_len=max_seq_len)
         self.examples = examples
         self.label_map = label_map
 
@@ -65,7 +66,7 @@ class NERDataset(Dataset):
         :param batch: Dataloader batch
         :return: Same output as the __getitem__ function
         """
-        input_ids, attention_mask, tags, tokens = zip(*batch)
+        input_ids, attention_mask, tags, sub_tags, tokens = zip(*batch)
 
         # Pad sequences in this batch
         # input_ids and attention_mask are padded with zeros
@@ -75,7 +76,13 @@ class NERDataset(Dataset):
         tags = pad_sequence(
             tags, batch_first=True, padding_value=torch.nn.CrossEntropyLoss().ignore_index
         )
-        r = {'input_ids':input_ids, 'attention_mask':attention_mask, 'labels':tags}
+        sub_tags = pad_sequence(sub_tags, batch_first=True, padding_value=torch.nn.CrossEntropyLoss().ignore_index)
+
+        r = {
+            'input_ids':input_ids, 'attention_mask':attention_mask, 'labels':tags,
+            'sub_tags':sub_tags, 'tokens':tokens
+             
+             }
         return r
     
     def collate_fn_2(self, batch):

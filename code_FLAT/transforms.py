@@ -6,7 +6,7 @@ import datasets
 
 
 class BertSeqTransform:
-    def __init__(self, bert_model, tokenizer,  label_map, max_seq_len=512):
+    def __init__(self, bert_model, tokenizer,  label_map, sub_labels_map, max_seq_len=512):
         self.tokenizer = tokenizer
         self.encoder = partial(
             self.tokenizer.encode,
@@ -15,7 +15,7 @@ class BertSeqTransform:
         )
         self.max_seq_len = max_seq_len
         self.label_map = label_map
-        print(label_map)
+        self.sub_labels_map = sub_labels_map
         # pad by an id to be ignored --> -100 (ignored in pytorch)
         self.pad_token = datasets.Token(text="UNK")
         self.pad_token_id = torch.nn.CrossEntropyLoss().ignore_index
@@ -29,9 +29,22 @@ class BertSeqTransform:
         self.id_of_o = self.label_map["O"]
         #
         
+    def get_subtags_onehot_encoding(self, l2_tags, l3_tags):
+        sub_tags = []
+        if l2_tags:
+            sub_tags += l2_tags
+        if len(l3_tags) > 0:
+            sub_tags += l3_tags
+        
+        one_hot = [torch.zeros(len(self.sub_labels_map))]
+        for tag in sub_tags:
+            one_hot[self.sub_labels_map[tag]] = 1
+        return one_hot
+        
+
 
     def __call__(self, segment):
-        input_ids, tags, l2_tags, l3_tags, tokens = list(), list(), list(), list(), list()
+        input_ids, tags, sub_tags, tokens = list(), list(), list(), list()
 
         for token in segment:
             # Sometimes the tokenizer fails to encode the word and return no input_ids, in that case, we use the input_id for [UNK]
@@ -42,17 +55,9 @@ class BertSeqTransform:
             tags += [self.label_map[token.main_tag[0]]] #actual tag
             tags += [self.id_of_o] * (len(token_input_ids) - 1) #tag of O
 
-            if token.l2_tags:
-                token.l2_tags +=  [self.id_of_o] * len(token_input_ids)
-            else:
-                l2_tags += [self.label_map[token.l2_tags[0]]] #actual tag
-                l2_tags += [self.id_of_o] * (len(token_input_ids) - 1)
-            
-            if len(token.l3_tags) == 0:
-                l3_tags += [self.id_of_o] * len(token_input_ids)
-            else:
-                l3_tags += [self.label_map[token.l3_tags[0]]]
-                l3_tags += [self.id_of_o] * (len(token_input_ids) - 1)
+            one_hot = self.get_subtags_onehot_encoding(token.l2_tags, token.l3_tags)
+            sub_tags += one_hot
+            sub_tags += [torch.zeros(len(self.sub_labels_map))] * (len(token_input_ids) - 1)
 
             # append tokens with UNK if the word has mutliple tokens
             tokens += [token] + [self.pad_token] * (len(token_input_ids) - 1)
@@ -64,8 +69,7 @@ class BertSeqTransform:
             print("Truncating the sequence %s to %d", text, self.max_seq_len - 2)
             input_ids = input_ids[:self.max_seq_len - 2]
             tags = tags[:self.max_seq_len - 2]
-            l2_tags = l2_tags[:self.max_seq_len - 2]
-            l3_tags = l3_tags[:self.max_seq_len - 2]
+            sub_tags = sub_tags[:self.max_seq_len - 2]
             tokens = tokens[:self.max_seq_len - 2]
 
         # create attention mask
@@ -82,11 +86,8 @@ class BertSeqTransform:
         tags.insert(0, self.id_of_o) # tag of CLS
         tags.append(self.id_of_o) # tag of SEP
 
-        l2_tags.insert(0, self.id_of_o) # tag of CLS
-        l2_tags.append(self.id_of_o)
-
-        l3_tags.insert(0, self.id_of_o) # tag of CLS
-        l3_tags.append(self.id_of_o)
+        sub_tags.insert(0, torch.zeros(len(self.sub_labels_map))) # tag of CLS
+        sub_tags.append(torch.zeros(len(self.sub_labels_map)))
 
         tokens.insert(0, self.pad_token) # token for CLS
         tokens.append(self.pad_token) # token for SEP
@@ -95,13 +96,14 @@ class BertSeqTransform:
         input_ids =  torch.LongTensor(input_ids)
         attention_mask =  torch.LongTensor(attention_mask)
         tags = torch.LongTensor(tags)
+        print(sub_tags)
+        sub_tags = torch.stack(sub_tags)
 
         #print(input_ids.shape, attention_mask.shape, tags.shape)
 
         assert input_ids.shape == attention_mask.shape
         assert len(input_ids) == len(attention_mask)
-        assert len(tags)  == len(l2_tags)
-        assert len(tags)  == len(l3_tags)
+        assert len(tags)  == len(sub_tags)
 
 
-        return input_ids, attention_mask, tags, l2_tags, l3_tags, tokens
+        return input_ids, attention_mask, tags, sub_tags, tokens
