@@ -28,6 +28,21 @@ def align_predictions(main_logits, main_labels, inv_main_label_map):
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
+
+
+def align_sub_logits(sub_logits, sub_labels, main_labels, inv_subtype_label_map):
+    main_labels = main_labels.detach().cpu().numpy()
+    
+    ignored_index = torch.nn.CrossEntropyLoss().ignore_index
+    valid_mask = main_labels != ignored_index
+
+    # Use boolean indexing to filter out the embeddings and logits
+    filtered_logits = sub_logits[valid_mask]
+    filtered_labels = sub_labels[valid_mask]
+    return filtered_logits, filtered_labels
+
+
+
 def align_sub_predictions(sub_logits, sub_labels, main_labels, inv_subtype_label_map):
     sub_logits = sub_logits.detach().cpu().numpy()
     sub_labels = sub_labels.detach().cpu().numpy()
