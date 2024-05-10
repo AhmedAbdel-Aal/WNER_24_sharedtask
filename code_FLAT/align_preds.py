@@ -103,3 +103,20 @@ def compute_metrics(out_label_list, preds_list):
         "recall": recall_score(out_label_list, preds_list),
         "f1": f1_score(out_label_list, preds_list),
     }
+
+
+def compute_metrics_subtypes(out_label_list, preds_list, subtype_label_map):
+    out = ['O' for i in range(63)]
+    for i in out_label_list:
+          out[subtype_label_map['i']] = i
+
+    preds = ['O' for i in range(63)]
+    for i in preds_list:
+          out[subtype_label_map['i']] = i
+
+    return {
+       # "accuracy_score": accuracy_score(out_label_list, preds_list),
+        "precision": precision_score(out, preds),
+        "recall": recall_score(out, preds),
+        "f1": f1_score(out, preds),
+    }
