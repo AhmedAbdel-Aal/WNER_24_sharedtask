@@ -39,7 +39,8 @@ class BertSeqTransform:
         one_hot = torch.zeros(len(self.sub_labels_map))
         
         if len(sub_tags) == 0:
-            one_hot[self.sub_labels_map["O"]] = 1
+            #one_hot[self.sub_labels_map["O"]] = 1
+            return one_hot
         else:
             for tag in sub_tags:
                 one_hot[self.sub_labels_map[tag]] = 1
@@ -63,7 +64,7 @@ class BertSeqTransform:
             sub_tags.append(one_hot)
             for i in range(len(token_input_ids) - 1):
               one_hot = torch.zeros(len(self.sub_labels_map))
-              one_hot[self.sub_labels_map["O"]] = 1
+              #one_hot[self.sub_labels_map["O"]] = 1
               sub_tags.append(one_hot)
             # append tokens with UNK if the word has mutliple tokens
             tokens += [token] + [self.pad_token] * (len(token_input_ids) - 1)
@@ -92,7 +93,7 @@ class BertSeqTransform:
         tags.append(self.id_of_o) # tag of SEP
         
         one_hot = torch.zeros(len(self.sub_labels_map))
-        one_hot[self.sub_labels_map["O"]] = 1
+        #one_hot[self.sub_labels_map["O"]] = 1
 
         sub_tags.insert(0, one_hot) # tag of CLS
         sub_tags.append(one_hot)

@@ -3,7 +3,7 @@ import torch.nn as nn
 from transformers import BertModel
 
 class BertWithMLPs(nn.Module):
-    def __init__(self, bert_model='aubmindlab/bert-base-arabertv2', num_main_labels=43, num_subtype_labels=63):
+    def __init__(self, bert_model='aubmindlab/bert-base-arabertv2', num_main_labels=43, num_subtype_labels=62):
         super().__init__()
         self.bert = BertModel.from_pretrained(bert_model)
         self.dropout = nn.Dropout(0.1)

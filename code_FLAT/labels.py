@@ -49,7 +49,7 @@ def get_IOB_labels():
 
 
     l2_IOB = []
-    l2_IOB.append('O')
+    #l2_IOB.append('O')
     for i in l2:
         l2_IOB.append('B-'+i)
         l2_IOB.append('I-'+i)

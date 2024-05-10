@@ -70,6 +70,7 @@ def align_sub_predictions(sub_logits, sub_labels, main_labels, inv_subtype_label
       for idx, j in enumerate(token_labels):
         if j == 1:
           token_subtags.append(inv_subtype_label_map[idx])
+          #print(idx, inv_subtype_label_map[idx])
       preds_list.append(token_subtags)
     
     out_label_list = []
@@ -82,8 +83,6 @@ def align_sub_predictions(sub_logits, sub_labels, main_labels, inv_subtype_label
 
     #preds_list = [inv_main_label_map[label.item()] for label in filtered_preds for k in label if label==1]
     #out_label_list = [inv_main_label_map[label.item()] for label in filtered_labels if label==1]
-    p = []
-    l = []
     for i,j in zip(preds_list, out_label_list):
       if len(i) > len(j):
           for k in range(len(j),len(i),1):
@@ -91,8 +90,7 @@ def align_sub_predictions(sub_logits, sub_labels, main_labels, inv_subtype_label
       elif len(i) < len(j):
           for k in range(len(i),len(j),1):
             i.append('O')
-      p.extend(i)
-      l.append(j)
+    
     assert len(preds_list) == len(out_label_list)
     return preds_list, out_label_list
 
@@ -106,13 +104,23 @@ def compute_metrics(out_label_list, preds_list):
 
 
 def compute_metrics_subtypes(out_label_list, preds_list, subtype_label_map):
-    out = ['O' for i in range(63)]
+    
+    out = []
     for i in out_label_list:
-          out[subtype_label_map['i']] = i
+          a = ['O' for i in range(62)]
+          for ii in i:
+            if ii != 'O':
+              a[subtype_label_map[ii]] = ii
+          out.append(a)
 
-    preds = ['O' for i in range(63)]
+    preds = []
     for i in preds_list:
-          out[subtype_label_map['i']] = i
+          a = ['O' for i in range(62)]
+          for ii in i:
+            if ii != 'O':
+              a[subtype_label_map[ii]] = ii
+              #print('YOHOO a change')
+          preds.append(a)
 
     return {
        # "accuracy_score": accuracy_score(out_label_list, preds_list),
