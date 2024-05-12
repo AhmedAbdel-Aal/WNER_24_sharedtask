@@ -41,6 +41,20 @@ def align_sub_logits(sub_logits, sub_labels, main_labels, inv_subtype_label_map)
     filtered_labels = sub_labels[valid_mask]
     return filtered_logits, filtered_labels
 
+def align_embeddings(embeddings, main_labels, inv_main_label_map):
+    main_labels = main_labels.detach().cpu().numpy()
+    embeddings = embeddings.detach().cpu().numpy()
+    
+    ignored_index = torch.nn.CrossEntropyLoss().ignore_index
+    valid_mask = main_labels != ignored_index
+
+    # Use boolean indexing to filter out the embeddings and logits
+    filtered_embeddings = embeddings[valid_mask]
+    filtered_labels = main_labels[valid_mask]
+    out_label_list = [inv_main_label_map[label.item()] for label in filtered_labels]
+
+    return torch.tensor(filtered_embeddings), out_label_list
+
 
 
 def align_sub_predictions(sub_logits, sub_labels, main_labels, inv_subtype_label_map):
