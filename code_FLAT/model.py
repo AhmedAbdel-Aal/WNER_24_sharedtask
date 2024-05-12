@@ -14,7 +14,7 @@ class BertWithMLPs(nn.Module):
         # MLP for subtype labels
         self.subtype_label_classifier = nn.Linear(self.bert.config.hidden_size, num_subtype_labels)
 
-    def forward(self, input_ids, attention_mask):
+    def forward(self, input_ids, attention_mask, get_embeddings=False):
         outputs = self.bert(input_ids, attention_mask=attention_mask)
         
         pooled_output = outputs.last_hidden_state
@@ -25,5 +25,6 @@ class BertWithMLPs(nn.Module):
         
         # Predict subtype labels
         subtype_labels_logits = self.subtype_label_classifier(pooled_output)
-        
+        if get_embeddings:
+          return main_labels_logits, subtype_labels_logits, pooled_output
         return main_labels_logits, subtype_labels_logits
